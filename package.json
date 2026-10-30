@@ -2,12 +2,8 @@
   "name": "pdam-dashboard",
   "version": "1.0.0",
   "description": "Monitoring PDAM",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
   "license": "ISC",
   "dependencies": {
-    "express": "^5.1.0"
+    "@upstash/redis": "^1.34.0"
   }
 }
