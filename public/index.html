@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoring PDAM</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  #status { font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: #1e293b; border-radius: 10px; padding: 14px; }
+  .card .label { font-size: 13px; color: #94a3b8; }
+  .card .value { font-size: 28px; font-weight: bold; margin-top: 4px; }
+  .card .unit { font-size: 14px; color: #94a3b8; font-weight: normal; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .box { background: #1e293b; border-radius: 10px; padding: 12px; height: 260px; }
+  .ok { color: #4ade80; } .warn { color: #f87171; }
+</style>
+</head>
+<body>
+  <h1>Monitoring PDAM</h1>
+  <div id="status">Menunggu data...</div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Debit Air</div>
+      <div class="value"><span id="vDebit">-</span> <span class="unit">L/menit</span></div></div>
+    <div class="card"><div class="label">Tegangan Baterai</div>
+      <div class="value"><span id="vTegangan">-</span> <span class="unit">V</span></div>
+      <div id="batStatus" class="label"></div></div>
+    <div class="card"><div class="label">Pulsa</div>
+      <div class="value"><span id="vPulsa">-</span></div></div>
+    <div class="card"><div class="label">Update Terakhir</div>
+      <div class="value" style="font-size:20px" id="vWaktu">-</div></div>
+  </div>
+
+  <div class="charts">
+    <div class="box"><canvas id="cDebit"></canvas></div>
+    <div class="box"><canvas id="cTegangan"></canvas></div>
+    <div class="box"><canvas id="cPulsa"></canvas></div>
+  </div>
+
+<script>
+const BATAS_BATERAI = 11.5; // di bawah ini dianggap lemah
+
+function buatChart(id, judul, warna) {
+  return new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: judul, data: [], borderColor: warna,
+            backgroundColor: warna + '33', fill: true, tension: 0.3, pointRadius: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { labels: { color: '#e2e8f0' } } },
+      scales: { x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 } },
+                y: { ticks: { color: '#94a3b8' } } }
+    }
+  });
+}
+
+const cDebit    = buatChart('cDebit',    'Debit (L/menit)', '#38bdf8');
+const cTegangan = buatChart('cTegangan', 'Tegangan (V)',    '#facc15');
+const cPulsa    = buatChart('cPulsa',    'Pulsa',           '#4ade80');
+
+function isi(chart, labels, data) {
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = data;
+  chart.update();
+}
+
+async function ambilData() {
+  try {
+    const res = await fetch('/api/data');
+    const data = (await res.json()).slice(-30); // 30 data terakhir
+    if (data.length === 0) {
+      document.getElementById('status').textContent = 'Belum ada data dari ESP32';
+      return;
+    }
+
+    const labels = data.map(d => new Date(d.waktu).toLocaleTimeString('id-ID'));
+    isi(cDebit,    labels, data.map(d => d.debit));
+    isi(cTegangan, labels, data.map(d => d.tegangan));
+    isi(cPulsa,    labels, data.map(d => d.pulsa));
+
+    const t = data[data.length - 1];
+    document.getElementById('vDebit').textContent = t.debit;
+    document.getElementById('vTegangan').textContent = t.tegangan;
+    document.getElementById('vPulsa').textContent = t.pulsa;
+    document.getElementById('vWaktu').textContent = new Date(t.waktu).toLocaleTimeString('id-ID');
+
+    const bat = document.getElementById('batStatus');
+    if (t.tegangan < BATAS_BATERAI) { bat.textContent = 'Baterai lemah'; bat.className = 'label warn'; }
+    else { bat.textContent = 'Baterai normal'; bat.className = 'label ok'; }
+
+    document.getElementById('status').textContent = 'Terhubung. Diperbarui otomatis tiap 5 detik.';
+  } catch (e) {
+    document.getElementById('status').textContent = 'Gagal mengambil data dari server';
+  }
+}
+
+ambilData();
+setInterval(ambilData, 5000);
+</script>
+</body>
+</html>
