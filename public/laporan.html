@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laporan PDAM</title>
+<style>
+:root{--bg:#071a24;--panel:#0e2a38;--line:#1d4558;--text:#e8f4f8;--muted:#8fb0bf;--air:#38bdf8}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:20px;max-width:1100px}
+h1{font-size:22px;margin:0}
+nav{display:flex;gap:8px;margin:12px 0 18px;flex-wrap:wrap}
+nav a{color:var(--text);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;background:var(--panel)}
+nav a.on{background:var(--air);color:#06222f;font-weight:600;border-color:var(--air)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px;overflow-x:auto}
+.box h2{margin:0 0 10px;font-size:15px;font-weight:600}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+input,select{background:#0a2230;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;min-width:140px}
+button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+button:hover{border-color:var(--air)}
+button.p{background:var(--air);color:#06222f;border-color:var(--air);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:13px}
+.r{text-align:right}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.sum{display:flex;gap:24px;flex-wrap:wrap;margin:6px 0 12px;font-size:14px}
+.sum b{font-size:20px;display:block}
+@media print{body{background:#fff;color:#000}body>*:not(#lap){display:none}#lap{border:0;background:#fff}th,td{border-color:#bbb;color:#000}.note{color:#444}}
+</style>
+</head>
+<body>
+<h1>Laporan dan tagihan</h1>
+<nav><a href="/">Dashboard</a><a class="on" href="/laporan.html">Laporan dan tagihan</a><a href="/baterai.html">Kesehatan baterai</a></nav>
+
+<section class="box">
+  <h2>Tarif</h2>
+  <div class="row">
+    <label>Tarif air per m³ (Rp)<input id="tarif" type="number" min="0"></label>
+    <label>Biaya tetap per bulan (Rp)<input id="tetap" type="number" min="0"></label>
+  </div>
+  <div class="note">Isi sesuai tarif PDAM yang berlaku. Nilai awal hanya contoh. Pengaturan tersimpan di browser ini.</div>
+</section>
+
+<section class="box">
+  <h2>Unduh</h2>
+  <div class="row">
+    <button onclick="csvMentah()">CSV data mentah</button>
+    <button onclick="csvHarian()">CSV rekap harian</button>
+    <button onclick="csvBulanan()">CSV rekap bulanan</button>
+  </div>
+  <div class="note">Data mentah berisi sampai 5.000 data terakhir. Rekap harian dan bulanan disimpan terus sejak fitur ini aktif.</div>
+</section>
+
+<section class="box">
+  <h2>Rekap per bulan</h2>
+  <table>
+    <thead><tr><th>Bulan</th><th class="r">Volume (m³)</th><th class="r">Biaya pemakaian</th><th class="r">Biaya tetap</th><th class="r">Total tagihan</th></tr></thead>
+    <tbody id="bln"><tr><td colspan="5">Belum ada data</td></tr></tbody>
+  </table>
+</section>
+
+<section class="box" id="lap">
+  <div class="row" style="justify-content:space-between">
+    <h2 id="jdl">Laporan bulan</h2>
+    <div class="row noprint">
+      <select id="pilih"></select>
+      <button onclick="unduhWord()">Unduh Word (.doc)</button>
+      <button class="p" onclick="window.print()">Cetak atau simpan PDF</button>
+    </div>
+  </div>
+  <div class="sum" id="ringkas"></div>
+  <table>
+    <thead><tr><th>Tanggal</th><th class="r">Volume (L)</th><th class="r">Volume (m³)</th><th class="r">Tegangan rata-rata (V)</th><th class="r">Min (V)</th><th class="r">Maks (V)</th></tr></thead>
+    <tbody id="hari"><tr><td colspan="6">Belum ada data</td></tr></tbody>
+  </table>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const rp = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+const f2 = n => (n == null ? '-' : Number(n).toFixed(2));
+const namaBln = b => new Date(b + '-01T00:00:00').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+let H = {}, cfg = { tarif: 5000, tetap: 10000 };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('cfgLaporan') || '{}')); } catch (e) {}
+$('tarif').value = cfg.tarif; $('tetap').value = cfg.tetap;
+['tarif', 'tetap'].forEach(i => $(i).oninput = () => {
+  cfg.tarif = +$('tarif').value || 0; cfg.tetap = +$('tetap').value || 0;
+  try { localStorage.setItem('cfgLaporan', JSON.stringify(cfg)); } catch (e) {}
+  tampil();
+});
+
+function unduh(nama, isi, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + isi], { type: mime }));
+  a.download = nama; a.click(); URL.revokeObjectURL(a.href);
+}
+const csv = rows => rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+const tanggalList = () => Object.keys(H).sort();
+function bulanan() {
+  const m = {};
+  tanggalList().forEach(d => { const b = d.slice(0, 7); m[b] = (m[b] || 0) + H[d].v; });
+  return m;
+}
+const tagihan = liter => { const pakai = liter / 1000 * cfg.tarif; return { pakai, tetap: cfg.tetap, total: pakai + cfg.tetap }; };
+
+async function csvMentah() {
+  const j = await (await fetch('/api/data?n=5000')).json();
+  const rows = [['Waktu', 'Debit (L/menit)', 'Tegangan (V)', 'Pulsa']].concat(j.data.map(x => [x.waktu, x.debit, x.tegangan, x.pulsa]));
+  unduh('data-mentah.csv', csv(rows), 'text/csv;charset=utf-8');
+}
+function csvHarian() {
+  const rows = [['Tanggal', 'Volume (L)', 'Volume (m3)', 'Tegangan rata-rata (V)', 'Min (V)', 'Maks (V)']];
+  tanggalList().forEach(d => { const x = H[d]; rows.push([d, f2(x.v), f2(x.v / 1000), x.n ? f2(x.s / x.n) : '', f2(x.mn), f2(x.mx)]); });
+  unduh('rekap-harian.csv', csv(rows), 'text/csv;charset=utf-8');
+}
+function csvBulanan() {
+  const rows = [['Bulan', 'Volume (m3)', 'Biaya pemakaian (Rp)', 'Biaya tetap (Rp)', 'Total tagihan (Rp)']];
+  Object.entries(bulanan()).forEach(([b, l]) => { const t = tagihan(l); rows.push([b, f2(l / 1000), Math.round(t.pakai), t.tetap, Math.round(t.total)]); });
+  unduh('rekap-bulanan.csv', csv(rows), 'text/csv;charset=utf-8');
+}
+function unduhWord() {
+  const html = '<html><head><meta charset="utf-8"><style>body{font-family:Arial}table{border-collapse:collapse;width:100%}td,th{border:1px solid #888;padding:4px;font-size:11pt}.sum b{display:block}</style></head><body>' + $('lap').innerHTML.replace(/<select[\s\S]*?<\/select>|<button[\s\S]*?<\/button>/g, '') + '</body></html>';
+  unduh('laporan-' + $('pilih').value + '.doc', html, 'application/msword');
+}
+
+function tampil() {
+  const bln = bulanan(), ks = Object.keys(bln).sort().reverse();
+  if (!ks.length) return;
+  $('bln').innerHTML = ks.map(b => { const t = tagihan(bln[b]);
+    return `<tr><td>${namaBln(b)}</td><td class="r">${f2(bln[b] / 1000)}</td><td class="r">${rp(t.pakai)}</td><td class="r">${rp(t.tetap)}</td><td class="r"><b>${rp(t.total)}</b></td></tr>`; }).join('');
+  const pil = $('pilih').value || ks[0];
+  $('pilih').innerHTML = ks.map(b => `<option value="${b}" ${b === pil ? 'selected' : ''}>${namaBln(b)}</option>`).join('');
+  const b = $('pilih').value, t = tagihan(bln[b]);
+  $('jdl').textContent = 'Laporan bulan ' + namaBln(b);
+  $('ringkas').innerHTML = `<div>Total pemakaian<b>${f2(bln[b] / 1000)} m³</b></div><div>Biaya pemakaian<b>${rp(t.pakai)}</b></div><div>Biaya tetap<b>${rp(t.tetap)}</b></div><div>Total tagihan<b>${rp(t.total)}</b></div>`;
+  $('hari').innerHTML = tanggalList().filter(d => d.startsWith(b)).map(d => { const x = H[d];
+    return `<tr><td>${d}</td><td class="r">${f2(x.v)}</td><td class="r">${f2(x.v / 1000)}</td><td class="r">${x.n ? f2(x.s / x.n) : '-'}</td><td class="r">${f2(x.mn)}</td><td class="r">${f2(x.mx)}</td></tr>`; }).join('');
+}
+$('pilih').onchange = tampil;
+
+(async () => {
+  try {
+    const j = await (await fetch('/api/rekap')).json();
+    if (!j.harian) throw new Error(j.error || 'Format data salah');
+    H = j.harian; tampil();
+  } catch (e) { $('bln').innerHTML = '<tr><td colspan="5">Gagal memuat rekap: ' + e.message + '</td></tr>'; }
+})();
+</script>
+</body>
+</html>

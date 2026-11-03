@@ -59,6 +59,8 @@ th{font-weight:600;color:var(--muted);font-size:13px}
 tr:last-child td{border-bottom:0}
 #msg{margin-top:12px;font-size:13px;color:var(--muted)}
 #msg.err{color:var(--bad)}
+.nv{color:var(--text);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px;background:var(--panel)}
+.nv:hover{border-color:var(--air)}
 .tot{font-size:14px;margin-top:10px}
 .rst{margin-top:12px;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
 .rst:hover{border-color:var(--bad);color:var(--bad)}
@@ -72,7 +74,11 @@ tr:last-child td{border-bottom:0}
     <div class="logo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></div>
     <div><h1>Monitoring PDAM</h1><div class="sub">Debit air, tegangan baterai, dan pulsa secara langsung</div></div>
   </div>
-  <div class="pill"><span class="dot" id="dot"></span><span id="stat">Menghubungkan...</span></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <a class="nv" href="/laporan.html">Laporan dan tagihan</a>
+    <a class="nv" href="/baterai.html">Kesehatan baterai</a>
+    <div class="pill"><span class="dot" id="dot"></span><span id="stat">Menghubungkan...</span></div>
+  </div>
 </header>
 
 <section class="stats">

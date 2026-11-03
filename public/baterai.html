@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kesehatan baterai</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#071a24;--panel:#0e2a38;--panel2:#123546;--line:#1d4558;--text:#e8f4f8;--muted:#8fb0bf;--air:#38bdf8;--ok:#34d399;--warn:#fbbf24;--bad:#f87171}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:20px;max-width:1100px}
+h1{font-size:22px;margin:0}
+nav{display:flex;gap:8px;margin:12px 0 18px;flex-wrap:wrap}
+nav a{color:var(--text);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;background:var(--panel)}
+nav a.on{background:var(--air);color:#06222f;font-weight:600;border-color:var(--air)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.box h2{margin:0 0 10px;font-size:15px;font-weight:600}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+input,select{background:#0a2230;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;min-width:130px}
+.note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+.hero{display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:20px;align-items:center}
+.big{font-size:56px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.big small{font-size:22px;color:var(--muted)}
+.bar{height:10px;background:var(--panel2);border-radius:99px;margin-top:12px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:99px;transition:width .6s}
+.chip{display:inline-block;font-size:13px;padding:4px 12px;border-radius:99px;font-weight:600;margin-top:10px}
+.ok{background:#34d3991f;color:var(--ok)}.warn{background:#fbbf241f;color:var(--warn)}.bad{background:#f871711f;color:var(--bad)}
+.info div{margin:6px 0;font-size:14px}.info span{color:var(--muted)}
+.par{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.par .box{margin:0}
+.par b{font-size:26px;font-variant-numeric:tabular-nums}
+.par .v{font-size:13px;margin-top:6px}
+.cv{height:240px}
+ul{margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.6}
+@media(max-width:640px){.hero{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>Kesehatan baterai</h1>
+<nav><a href="/">Dashboard</a><a href="/laporan.html">Laporan dan tagihan</a><a class="on" href="/baterai.html">Kesehatan baterai</a></nav>
+
+<section class="box">
+  <h2>Data baterai</h2>
+  <div class="row">
+    <label>Jenis baterai
+      <select id="tipe"><option value="agm">Aki kering (AGM/VRLA) 12 V</option><option value="basah">Aki basah 12 V</option><option value="lifepo4">LiFePO4 12,8 V</option></select></label>
+    <label>Tanggal pasang<input id="pasang" type="date"></label>
+    <label>Umur desain (tahun)<input id="umur" type="number" min="1" step="0.5"></label>
+    <label>Tegangan penuh (V)<input id="penuh" type="number" step="0.1"></label>
+    <label>Batas pengosongan dalam (V)<input id="dalam" type="number" step="0.1"></label>
+  </div>
+  <div class="note">Nilai awal mengikuti angka umum tiap jenis baterai. Sesuaikan dengan datasheet baterai yang dipakai. Pengaturan tersimpan di browser ini.</div>
+</section>
+
+<section class="box hero">
+  <div>
+    <div class="big"><span id="soh">-</span><small>%</small></div>
+    <div class="bar"><i id="bar"></i></div>
+    <span class="chip" id="chip">Menghitung...</span>
+  </div>
+  <div class="info">
+    <div><span>Tegangan terakhir:</span> <b id="vNow">-</b></div>
+    <div><span>Perkiraan perlu diganti:</span> <b id="ganti">-</b></div>
+    <div><span>Alasan perkiraan:</span> <span id="alasan" style="color:var(--text)">-</span></div>
+  </div>
+</section>
+
+<section class="par" id="par"></section>
+
+<section class="box" style="margin-top:14px">
+  <h2>Tegangan harian, 30 hari terakhir</h2>
+  <div class="cv"><canvas id="cv"></canvas></div>
+</section>
+
+<section class="box">
+  <h2>Saran</h2>
+  <ul id="saran"><li>Menunggu data</li></ul>
+  <div class="note">Nilai ini adalah perkiraan dari pembacaan tegangan dan umur pakai, bukan hasil uji kapasitas. Untuk kepastian, lakukan uji kapasitas (pengosongan terukur) atau ukur hambatan dalam baterai dengan alat khusus, terutama saat nilainya mendekati batas ganti.</div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const PRE = { agm: { umur: 4, penuh: 12.8, dalam: 11.5 }, basah: { umur: 3, penuh: 12.6, dalam: 11.5 }, lifepo4: { umur: 8, penuh: 13.4, dalam: 12.0 } };
+let cfg = { tipe: 'agm', pasang: '', ...PRE.agm }, H = {}, grafik = null;
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('cfgBat') || '{}')); } catch (e) {}
+const clamp = x => Math.max(0, Math.min(100, x));
+const bulanLagi = m => new Date(Date.now() + m * 30.44 * 864e5).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+function isi() { $('tipe').value = cfg.tipe; $('pasang').value = cfg.pasang; $('umur').value = cfg.umur; $('penuh').value = cfg.penuh; $('dalam').value = cfg.dalam; }
+$('tipe').onchange = () => { cfg = { ...cfg, tipe: $('tipe').value, ...PRE[$('tipe').value] }; isi(); hitung(); };
+['pasang', 'umur', 'penuh', 'dalam'].forEach(i => $(i).oninput = () => {
+  cfg.pasang = $('pasang').value; cfg.umur = +$('umur').value || 1; cfg.penuh = +$('penuh').value; cfg.dalam = +$('dalam').value; hitung();
+});
+
+function hitung() {
+  try { localStorage.setItem('cfgBat', JSON.stringify(cfg)); } catch (e) {}
+  const hari = Object.entries(H).filter(([, x]) => x.n > 0).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const l30 = hari.slice(-30), l14 = hari.slice(-14), P = [];
+
+  // 1. Umur pakai
+  const usia = cfg.pasang ? (Date.now() - new Date(cfg.pasang)) / (30.44 * 864e5) : null;
+  P.push({ n: 'Umur pakai', w: 40, s: usia == null ? null : clamp(100 * (1 - usia / (cfg.umur * 12))),
+    v: usia == null ? 'Isi tanggal pasang' : usia.toFixed(1) + ' dari ' + Math.round(cfg.umur * 12) + ' bulan',
+    k: 'Nilai 100 saat baru, 0 saat mencapai umur desain.' });
+
+  // 2. Tegangan puncak harian
+  const avgMx = l14.length >= 3 ? l14.reduce((a, [, x]) => a + x.mx, 0) / l14.length : null;
+  P.push({ n: 'Tegangan puncak', w: 30, s: avgMx == null ? null : clamp((avgMx - (cfg.penuh - 0.8)) / 0.8 * 100),
+    v: avgMx == null ? 'Data belum cukup (min. 3 hari)' : 'Rata-rata ' + avgMx.toFixed(2) + ' V (14 hari)',
+    k: 'Nilai 100 bila puncak harian mencapai ' + cfg.penuh.toFixed(1) + ' V, 0 bila turun 0,8 V di bawahnya. Baterai lemah sulit terisi penuh.' });
+
+  // 3. Pengosongan dalam
+  const dalam = l30.length >= 3 ? l30.filter(([, x]) => x.mn < cfg.dalam).length : null;
+  P.push({ n: 'Pengosongan dalam', w: 20, s: dalam == null ? null : clamp(100 - dalam * 12),
+    v: dalam == null ? 'Data belum cukup (min. 3 hari)' : dalam + ' hari di bawah ' + cfg.dalam.toFixed(1) + ' V (30 hari)',
+    k: 'Tiap hari yang menyentuh batas mengurangi 12 poin. Pengosongan dalam mempercepat kerusakan.' });
+
+  // 4. Tren tegangan
+  let tren = null;
+  if (l30.length >= 10) {
+    const y = l30.map(([, x]) => x.s / x.n), n = y.length, xm = (n - 1) / 2, ym = y.reduce((a, b) => a + b, 0) / n;
+    let sxy = 0, sxx = 0; y.forEach((v, i) => { sxy += (i - xm) * (v - ym); sxx += (i - xm) ** 2; });
+    tren = sxy / sxx * 30;   // perubahan V per 30 hari
+  }
+  P.push({ n: 'Tren tegangan', w: 10, s: tren == null ? null : clamp(100 + Math.min(0, tren) / 0.4 * 100),
+    v: tren == null ? 'Data belum cukup (min. 10 hari)' : (tren >= 0 ? '+' : '') + tren.toFixed(2) + ' V per 30 hari',
+    k: 'Nilai 100 bila stabil atau naik, 0 bila turun 0,4 V atau lebih per 30 hari.' });
+
+  $('par').innerHTML = P.map(p => { const c = p.s == null ? 'var(--muted)' : p.s >= 80 ? 'var(--ok)' : p.s >= 60 ? 'var(--warn)' : 'var(--bad)';
+    return `<div class="box"><div style="font-size:13px;color:var(--muted)">${p.n} (bobot ${p.w}%)</div><b style="color:${c}">${p.s == null ? '-' : Math.round(p.s)}</b><div class="bar"><i style="width:${p.s || 0}%;background:${c}"></i></div><div class="v">${p.v}</div><div class="note">${p.k}</div></div>`; }).join('');
+
+  // Nilai kesehatan gabungan
+  const ada = P.filter(p => p.s != null), bobot = ada.reduce((a, p) => a + p.w, 0);
+  if (!ada.length) { $('soh').textContent = '-'; $('chip').textContent = 'Isi tanggal pasang atau tunggu data masuk'; $('chip').className = 'chip'; }
+  else {
+    const soh = ada.reduce((a, p) => a + p.s * p.w, 0) / bobot;
+    const k = soh >= 80 ? ['ok', 'Baik'] : soh >= 60 ? ['warn', 'Mulai menurun, pantau rutin'] : ['bad', 'Segera uji kapasitas atau ganti'];
+    const warna = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)' }[k[0]];
+    $('soh').textContent = Math.round(soh); $('bar').style.width = soh + '%'; $('bar').style.background = warna;
+    $('chip').textContent = k[1] + (ada.length < 4 ? ' (dari ' + ada.length + ' dari 4 parameter)' : ''); $('chip').className = 'chip ' + k[0];
+
+    // Perkiraan waktu ganti
+    const kand = [];
+    if (usia != null) kand.push({ m: cfg.umur * 12 - usia, t: 'umur desain tercapai' });
+    if (usia != null && usia >= 1 && soh < 100) kand.push({ m: (soh - 60) / ((100 - soh) / usia), t: 'laju penurunan nilai kesehatan sampai 60' });
+    if (soh <= 60) { $('ganti').textContent = 'Sekarang'; $('alasan').textContent = 'Nilai kesehatan sudah di bawah 60'; }
+    else if (kand.length) {
+      const c = kand.sort((a, b) => a.m - b.m)[0];
+      $('ganti').textContent = c.m <= 0 ? 'Sekarang' : bulanLagi(c.m) + ' (sekitar ' + Math.round(c.m) + ' bulan lagi)';
+      $('alasan').textContent = c.t.charAt(0).toUpperCase() + c.t.slice(1);
+    } else { $('ganti').textContent = 'Isi tanggal pasang'; $('alasan').textContent = '-'; }
+
+    // Saran
+    const s = [];
+    if (dalam > 0) s.push('Baterai menyentuh batas pengosongan pada ' + dalam + ' hari. Periksa pengisian dan beban yang terlalu besar.');
+    if (avgMx != null && P[1].s < 70) s.push('Baterai jarang terisi penuh. Periksa pengisi daya atau panel surya, dan cek sambungan kabel.');
+    if (tren != null && tren < -0.2) s.push('Tegangan rata-rata turun tiap bulan. Jadwalkan uji kapasitas.');
+    if (usia != null && usia / (cfg.umur * 12) > 0.8) s.push('Umur pakai sudah di atas 80% umur desain. Siapkan baterai pengganti.');
+    if (!s.length) s.push('Tidak ada tanda masalah. Lanjutkan pemantauan.');
+    $('saran').innerHTML = s.map(x => '<li>' + x + '</li>').join('');
+  }
+
+  // Grafik
+  const lab = l30.map(([d]) => d.slice(5)), ds = (n, f, c) => ({ label: n, data: l30.map(([, x]) => f(x)), borderColor: c, borderWidth: 2, tension: .3, pointRadius: 1 });
+  const data = { labels: lab, datasets: [ds('Maks', x => x.mx, '#34d399'), ds('Rata-rata', x => x.s / x.n, '#38bdf8'), ds('Min', x => x.mn, '#f87171')] };
+  if (!grafik) grafik = new Chart($('cv'), { type: 'line', data, options: { responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { labels: { color: '#e8f4f8' } } }, scales: { x: { grid: { display: false }, ticks: { color: '#8fb0bf' } }, y: { grid: { color: '#1d4558' }, ticks: { color: '#8fb0bf' } } } } });
+  else { grafik.data = data; grafik.update(); }
+}
+
+isi();
+(async () => {
+  try {
+    const j = await (await fetch('/api/rekap')).json();
+    if (!j.harian) throw new Error(j.error || 'Format data salah');
+    H = j.harian;
+    const d = await (await fetch('/api/data?n=1')).json();
+    if (d.data && d.data.length) $('vNow').textContent = d.data[d.data.length - 1].tegangan + ' V';
+  } catch (e) { $('alasan').textContent = 'Gagal memuat data: ' + e.message; }
+  hitung();
+})();
+</script>
+</body>
+</html>
