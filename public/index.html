@@ -59,6 +59,10 @@ th{font-weight:600;color:var(--muted);font-size:13px}
 tr:last-child td{border-bottom:0}
 #msg{margin-top:12px;font-size:13px;color:var(--muted)}
 #msg.err{color:var(--bad)}
+.tot{font-size:14px;margin-top:10px}
+.rst{margin-top:12px;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+.rst:hover{border-color:var(--bad);color:var(--bad)}
+.rst:focus-visible{outline:2px solid var(--air);outline-offset:2px}
 @media(max-width:520px){body{padding:14px}.val{font-size:32px}}
 </style>
 </head>
@@ -76,6 +80,9 @@ tr:last-child td{border-bottom:0}
     <div class="lbl">Debit air</div>
     <div class="val"><span id="vDebit">-</span><small>L/menit</small></div>
     <div class="note" id="nDebit">Menunggu data</div>
+    <div class="tot">Total volume: <b><span id="tVol">-</span> L</b></div>
+    <div class="note">Dihitung sejak <span id="sVol">-</span></div>
+    <button class="rst" data-t="debit">Reset debit</button>
   </div>
   <div class="card" style="--c:var(--bat)">
     <div class="lbl">Tegangan baterai</div>
@@ -87,6 +94,8 @@ tr:last-child td{border-bottom:0}
     <div class="lbl">Pulsa</div>
     <div class="val"><span id="vPulsa">-</span></div>
     <div class="note" id="nPulsa">Menunggu data</div>
+    <div class="note">Dihitung sejak <span id="sPul">-</span> (nilai sensor: <span id="rawP">-</span>)</div>
+    <button class="rst" data-t="pulsa">Reset pulsa</button>
   </div>
   <div class="card" style="--c:var(--waktu)">
     <div class="lbl">Data terakhir masuk</div>
@@ -115,6 +124,13 @@ tr:last-child td{border-bottom:0}
     <tbody id="rows"><tr><td colspan="4">Belum ada data</td></tr></tbody>
   </table>
 </section>
+<section class="tbl">
+  <h2>Riwayat reset</h2>
+  <table>
+    <thead><tr><th>Waktu reset</th><th>Yang direset</th><th>Volume saat itu (L)</th><th>Pulsa saat itu</th></tr></thead>
+    <tbody id="rwy"><tr><td colspan="4">Belum ada reset</td></tr></tbody>
+  </table>
+</section>
 <div id="msg"></div>
 
 <script>
@@ -123,12 +139,13 @@ const BAT_MIN = 11.0;      // 0%  (aki 12 V)
 const BAT_MAX = 12.6;      // 100%
 const BAT_LEMAH = 11.5;    // di bawah ini = lemah
 const BAT_SEDANG = 12.0;   // di bawah ini = sedang
-const OFFLINE_DETIK = 60;  // tidak ada data lebih dari ini = offline
-const REFRESH_MS = 5000;
+const OFFLINE_DETIK = 90;  // tidak ada data lebih dari ini = offline
+const REFRESH_MS = 20000;  // hemat kuota database
 // ==============================================
 
 const $ = id => document.getElementById(id);
-let jumlah = 20, data = [];
+let jumlah = 20, data = [], st = { volume: 0, pulsaBase: 0 };
+try { jumlah = +localStorage.getItem('jumlah') || 20; } catch (e) {}
 
 function chart(id, warna) {
   return new Chart($(id), {
@@ -162,7 +179,11 @@ function render() {
   const t = data[data.length - 1];
   $('vDebit').textContent = t.debit;
   $('vTeg').textContent = t.tegangan;
-  $('vPulsa').textContent = t.pulsa;
+  $('vPulsa').textContent = Math.max(0, t.pulsa - st.pulsaBase);
+  $('rawP').textContent = t.pulsa;
+  $('tVol').textContent = st.volume.toFixed(2);
+  $('sVol').textContent = st.sejakVol ? tgl(st.sejakVol) : 'awal pemasangan';
+  $('sPul').textContent = st.sejakPul ? tgl(st.sejakPul) : 'awal pemasangan';
   $('vWaktu').textContent = jam(t.waktu);
 
   if (data.length > 1) {
@@ -195,10 +216,11 @@ function status() {
 
 async function ambil() {
   try {
-    const r = await fetch('/api/data');
+    const r = await fetch('/api/data?n=100');
     const j = await r.json();
-    if (!Array.isArray(j)) throw new Error(j.error || 'Format data salah');
-    data = j;
+    if (!Array.isArray(j.data)) throw new Error(j.error || 'Format data salah');
+    data = j.data;
+    st = { volume: j.volume, pulsaBase: j.pulsaBase, sejakVol: j.sejakVol, sejakPul: j.sejakPul };
     $('msg').textContent = ''; $('msg').className = '';
     if (!data.length) { $('stat').textContent = 'Belum ada data dari ESP32'; $('dot').className = 'dot'; return; }
     render();
@@ -214,7 +236,39 @@ document.querySelectorAll('.tools button').forEach(b => b.onclick = () => {
   b.classList.add('act'); jumlah = +b.dataset.n; if (data.length) render();
 });
 
-ambil(); setInterval(ambil, REFRESH_MS); setInterval(status, 1000);
+const tgl = t => new Date(t).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+async function muatRiwayat() {
+  try {
+    const rs = await (await fetch('/api/reset')).json();
+    if (!Array.isArray(rs) || !rs.length) return;
+    $('rwy').innerHTML = rs.map(x =>
+      `<tr><td>${tgl(x.waktu)}</td><td>${x.target}</td><td>${x.volume}</td><td>${x.pulsa}</td></tr>`).join('');
+  } catch (e) {}
+}
+
+async function reset(target) {
+  if (!confirm('Reset ' + target + '? Nilai saat ini disimpan ke riwayat reset.')) return;
+  let pin;
+  for (let i = 0; i < 2; i++) {
+    const r = await fetch('/api/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ target, pin }) });
+    if (r.status === 401) { pin = prompt('Masukkan PIN reset'); if (pin === null) return; continue; }
+    if (r.ok) { await ambil(); muatRiwayat(); return; }
+    alert('Reset gagal, coba lagi.'); return;
+  }
+}
+
+document.querySelectorAll('.rst').forEach(b => b.onclick = () => reset(b.dataset.t));
+document.querySelectorAll('.tools button').forEach(b => {
+  b.classList.toggle('act', +b.dataset.n === jumlah);
+  b.addEventListener('click', () => { try { localStorage.setItem('jumlah', b.dataset.n); } catch (e) {} });
+});
+
+ambil(); muatRiwayat();
+setInterval(() => { if (!document.hidden) ambil(); }, REFRESH_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ambil(); });
+setInterval(status, 1000);
 </script>
 </body>
 </html>
