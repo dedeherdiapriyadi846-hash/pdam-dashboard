@@ -6,101 +6,215 @@
 <title>Monitoring PDAM</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 16px; }
-  h1 { margin: 0 0 4px; font-size: 22px; }
-  #status { font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .card { background: #1e293b; border-radius: 10px; padding: 14px; }
-  .card .label { font-size: 13px; color: #94a3b8; }
-  .card .value { font-size: 28px; font-weight: bold; margin-top: 4px; }
-  .card .unit { font-size: 14px; color: #94a3b8; font-weight: normal; }
-  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-  .box { background: #1e293b; border-radius: 10px; padding: 12px; height: 260px; }
-  .ok { color: #4ade80; } .warn { color: #f87171; }
+:root{
+  --bg:#071a24; --panel:#0e2a38; --panel2:#123546; --line:#1d4558;
+  --text:#e8f4f8; --muted:#8fb0bf;
+  --air:#38bdf8; --bat:#fbbf24; --pulsa:#34d399; --waktu:#a78bfa;
+  --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 500px at 20% -10%,#0c3a4f 0%,var(--bg) 60%) fixed;color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;padding:20px;max-width:1280px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:20px}
+.brand{display:flex;gap:12px;align-items:center}
+.logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(160deg,#38bdf8,#0369a1);display:grid;place-items:center}
+h1{margin:0;font-size:22px;font-weight:700;letter-spacing:.2px}
+.sub{font-size:13px;color:var(--muted);margin-top:2px}
+.pill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--ok);box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:p 2s infinite}
+.dot.off{background:var(--bad)}
+@keyframes p{70%{box-shadow:0 0 0 8px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+@media (prefers-reduced-motion:reduce){.dot.on{animation:none}}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,var(--line))}
+.lbl{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.val{font-size:38px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;line-height:1.1}
+.val small{font-size:15px;font-weight:500;color:var(--muted);margin-left:4px}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.bar{height:8px;background:var(--panel2);border-radius:99px;margin-top:12px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:99px;transition:width .6s,background .3s}
+.chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:99px;margin-top:8px;font-weight:600}
+.chip.ok{background:#34d3991f;color:var(--ok)}.chip.warn{background:#fbbf241f;color:var(--warn)}.chip.bad{background:#f871711f;color:var(--bad)}
+
+.tools{display:flex;gap:8px;align-items:center;margin:18px 0 10px;flex-wrap:wrap}
+.tools span{font-size:13px;color:var(--muted);margin-right:4px}
+.tools button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
+.tools button:hover{background:var(--panel2)}
+.tools button:focus-visible{outline:2px solid var(--air);outline-offset:2px}
+.tools button.act{background:var(--air);color:#06222f;border-color:var(--air);font-weight:600}
+
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 10px}
+.box h2{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--muted)}
+.cv{height:220px}
+
+.tbl{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:14px;overflow-x:auto}
+.tbl h2{margin:0 0 10px;font-size:14px;font-weight:600;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:13px}
+tr:last-child td{border-bottom:0}
+#msg{margin-top:12px;font-size:13px;color:var(--muted)}
+#msg.err{color:var(--bad)}
+@media(max-width:520px){body{padding:14px}.val{font-size:32px}}
 </style>
 </head>
 <body>
-  <h1>Monitoring PDAM</h1>
-  <div id="status">Menunggu data...</div>
-
-  <div class="cards">
-    <div class="card"><div class="label">Debit Air</div>
-      <div class="value"><span id="vDebit">-</span> <span class="unit">L/menit</span></div></div>
-    <div class="card"><div class="label">Tegangan Baterai</div>
-      <div class="value"><span id="vTegangan">-</span> <span class="unit">V</span></div>
-      <div id="batStatus" class="label"></div></div>
-    <div class="card"><div class="label">Pulsa</div>
-      <div class="value"><span id="vPulsa">-</span></div></div>
-    <div class="card"><div class="label">Update Terakhir</div>
-      <div class="value" style="font-size:20px" id="vWaktu">-</div></div>
+<header>
+  <div class="brand">
+    <div class="logo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></div>
+    <div><h1>Monitoring PDAM</h1><div class="sub">Debit air, tegangan baterai, dan pulsa secara langsung</div></div>
   </div>
+  <div class="pill"><span class="dot" id="dot"></span><span id="stat">Menghubungkan...</span></div>
+</header>
 
-  <div class="charts">
-    <div class="box"><canvas id="cDebit"></canvas></div>
-    <div class="box"><canvas id="cTegangan"></canvas></div>
-    <div class="box"><canvas id="cPulsa"></canvas></div>
+<section class="stats">
+  <div class="card" style="--c:var(--air)">
+    <div class="lbl">Debit air</div>
+    <div class="val"><span id="vDebit">-</span><small>L/menit</small></div>
+    <div class="note" id="nDebit">Menunggu data</div>
   </div>
+  <div class="card" style="--c:var(--bat)">
+    <div class="lbl">Tegangan baterai</div>
+    <div class="val"><span id="vTeg">-</span><small>V</small></div>
+    <div class="bar"><i id="bBat"></i></div>
+    <span class="chip" id="cBat">-</span>
+  </div>
+  <div class="card" style="--c:var(--pulsa)">
+    <div class="lbl">Pulsa</div>
+    <div class="val"><span id="vPulsa">-</span></div>
+    <div class="note" id="nPulsa">Menunggu data</div>
+  </div>
+  <div class="card" style="--c:var(--waktu)">
+    <div class="lbl">Data terakhir masuk</div>
+    <div class="val" style="font-size:28px"><span id="vWaktu">-</span></div>
+    <div class="note" id="nAgo">-</div>
+  </div>
+</section>
+
+<div class="tools">
+  <span>Tampilkan</span>
+  <button data-n="20" class="act">20 data</button>
+  <button data-n="50">50 data</button>
+  <button data-n="100">100 data</button>
+</div>
+
+<section class="charts">
+  <div class="box"><h2>Debit air (L/menit)</h2><div class="cv"><canvas id="cDebit"></canvas></div></div>
+  <div class="box"><h2>Tegangan baterai (V)</h2><div class="cv"><canvas id="cTeg"></canvas></div></div>
+  <div class="box"><h2>Pulsa</h2><div class="cv"><canvas id="cPulsa"></canvas></div></div>
+</section>
+
+<section class="tbl">
+  <h2>10 data terbaru</h2>
+  <table>
+    <thead><tr><th>Waktu</th><th>Debit (L/menit)</th><th>Tegangan (V)</th><th>Pulsa</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="4">Belum ada data</td></tr></tbody>
+  </table>
+</section>
+<div id="msg"></div>
 
 <script>
-const BATAS_BATERAI = 11.5; // di bawah ini dianggap lemah
+// ===== Pengaturan (ubah sesuai kebutuhan) =====
+const BAT_MIN = 11.0;      // 0%  (aki 12 V)
+const BAT_MAX = 12.6;      // 100%
+const BAT_LEMAH = 11.5;    // di bawah ini = lemah
+const BAT_SEDANG = 12.0;   // di bawah ini = sedang
+const OFFLINE_DETIK = 60;  // tidak ada data lebih dari ini = offline
+const REFRESH_MS = 5000;
+// ==============================================
 
-function buatChart(id, judul, warna) {
-  return new Chart(document.getElementById(id), {
+const $ = id => document.getElementById(id);
+let jumlah = 20, data = [];
+
+function chart(id, warna) {
+  return new Chart($(id), {
     type: 'line',
-    data: { labels: [], datasets: [{ label: judul, data: [], borderColor: warna,
-            backgroundColor: warna + '33', fill: true, tension: 0.3, pointRadius: 2 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, animation: false,
-      plugins: { legend: { labels: { color: '#e2e8f0' } } },
-      scales: { x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 } },
-                y: { ticks: { color: '#94a3b8' } } }
-    }
+    data: { labels: [], datasets: [{ data: [], borderColor: warna, borderWidth: 2, tension: .35, pointRadius: 0,
+      pointHoverRadius: 5, fill: true,
+      backgroundColor: c => {
+        const a = c.chart.chartArea; if (!a) return warna + '33';
+        const g = c.chart.ctx.createLinearGradient(0, a.top, 0, a.bottom);
+        g.addColorStop(0, warna + '66'); g.addColorStop(1, warna + '05'); return g;
+      } }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false }, ticks: { color: '#8fb0bf', maxTicksLimit: 5, maxRotation: 0 } },
+                y: { grid: { color: '#1d4558' }, ticks: { color: '#8fb0bf' } } } }
   });
 }
+const cD = chart('cDebit', '#38bdf8'), cT = chart('cTeg', '#fbbf24'), cP = chart('cPulsa', '#34d399');
 
-const cDebit    = buatChart('cDebit',    'Debit (L/menit)', '#38bdf8');
-const cTegangan = buatChart('cTegangan', 'Tegangan (V)',    '#facc15');
-const cPulsa    = buatChart('cPulsa',    'Pulsa',           '#4ade80');
+const jam = t => new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function lalu(s) { return s < 60 ? s + ' detik lalu' : s < 3600 ? Math.floor(s / 60) + ' menit lalu' : Math.floor(s / 3600) + ' jam lalu'; }
 
-function isi(chart, labels, data) {
-  chart.data.labels = labels;
-  chart.data.datasets[0].data = data;
-  chart.update();
+function render() {
+  const d = data.slice(-jumlah);
+  const labels = d.map(x => jam(x.waktu));
+  [[cD, 'debit'], [cT, 'tegangan'], [cP, 'pulsa']].forEach(([c, k]) => {
+    c.data.labels = labels; c.data.datasets[0].data = d.map(x => x[k]); c.update();
+  });
+
+  const t = data[data.length - 1];
+  $('vDebit').textContent = t.debit;
+  $('vTeg').textContent = t.tegangan;
+  $('vPulsa').textContent = t.pulsa;
+  $('vWaktu').textContent = jam(t.waktu);
+
+  if (data.length > 1) {
+    const sel = (t.debit - data[data.length - 2].debit).toFixed(1);
+    $('nDebit').textContent = sel > 0 ? 'Naik ' + sel + ' dari data sebelumnya' : sel < 0 ? 'Turun ' + Math.abs(sel) + ' dari data sebelumnya' : 'Tidak berubah';
+    const sp = t.pulsa - data[data.length - 2].pulsa;
+    $('nPulsa').textContent = sp > 0 ? 'Naik ' + sp : sp < 0 ? 'Turun ' + Math.abs(sp) : 'Tidak berubah';
+  }
+
+  const persen = Math.max(0, Math.min(100, (t.tegangan - BAT_MIN) / (BAT_MAX - BAT_MIN) * 100));
+  const k = t.tegangan < BAT_LEMAH ? ['bad', 'Baterai lemah', 'var(--bad)']
+          : t.tegangan < BAT_SEDANG ? ['warn', 'Baterai sedang', 'var(--warn)']
+          : ['ok', 'Baterai normal', 'var(--ok)'];
+  $('bBat').style.width = persen + '%'; $('bBat').style.background = k[2];
+  $('cBat').className = 'chip ' + k[0]; $('cBat').textContent = k[1] + ' (perkiraan ' + Math.round(persen) + '%)';
+
+  $('rows').innerHTML = data.slice(-10).reverse().map(x =>
+    `<tr><td>${jam(x.waktu)}</td><td>${x.debit}</td><td>${x.tegangan}</td><td>${x.pulsa}</td></tr>`).join('');
+  status();
 }
 
-async function ambilData() {
+function status() {
+  if (!data.length) return;
+  const s = Math.max(0, Math.round((Date.now() - new Date(data[data.length - 1].waktu)) / 1000));
+  const on = s <= OFFLINE_DETIK;
+  $('dot').className = 'dot ' + (on ? 'on' : 'off');
+  $('stat').textContent = on ? 'Alat online' : 'Alat offline';
+  $('nAgo').textContent = lalu(s);
+}
+
+async function ambil() {
   try {
-    const res = await fetch('/api/data');
-    const data = (await res.json()).slice(-30); // 30 data terakhir
-    if (data.length === 0) {
-      document.getElementById('status').textContent = 'Belum ada data dari ESP32';
-      return;
-    }
-
-    const labels = data.map(d => new Date(d.waktu).toLocaleTimeString('id-ID'));
-    isi(cDebit,    labels, data.map(d => d.debit));
-    isi(cTegangan, labels, data.map(d => d.tegangan));
-    isi(cPulsa,    labels, data.map(d => d.pulsa));
-
-    const t = data[data.length - 1];
-    document.getElementById('vDebit').textContent = t.debit;
-    document.getElementById('vTegangan').textContent = t.tegangan;
-    document.getElementById('vPulsa').textContent = t.pulsa;
-    document.getElementById('vWaktu').textContent = new Date(t.waktu).toLocaleTimeString('id-ID');
-
-    const bat = document.getElementById('batStatus');
-    if (t.tegangan < BATAS_BATERAI) { bat.textContent = 'Baterai lemah'; bat.className = 'label warn'; }
-    else { bat.textContent = 'Baterai normal'; bat.className = 'label ok'; }
-
-    document.getElementById('status').textContent = 'Terhubung. Diperbarui otomatis tiap 5 detik.';
+    const r = await fetch('/api/data');
+    const j = await r.json();
+    if (!Array.isArray(j)) throw new Error(j.error || 'Format data salah');
+    data = j;
+    $('msg').textContent = ''; $('msg').className = '';
+    if (!data.length) { $('stat').textContent = 'Belum ada data dari ESP32'; $('dot').className = 'dot'; return; }
+    render();
   } catch (e) {
-    document.getElementById('status').textContent = 'Gagal mengambil data dari server';
+    $('dot').className = 'dot off'; $('stat').textContent = 'Server bermasalah';
+    $('msg').className = 'err';
+    $('msg').textContent = 'Gagal mengambil data. Cek alamat /api/data dan koneksi database. (' + e.message + ')';
   }
 }
 
-ambilData();
-setInterval(ambilData, 5000);
+document.querySelectorAll('.tools button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tools button').forEach(x => x.classList.remove('act'));
+  b.classList.add('act'); jumlah = +b.dataset.n; if (data.length) render();
+});
+
+ambil(); setInterval(ambil, REFRESH_MS); setInterval(status, 1000);
 </script>
 </body>
 </html>
